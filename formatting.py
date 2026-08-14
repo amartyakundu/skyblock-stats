@@ -16,3 +16,22 @@ def format_level(experience):
     progress = experience % 100
 
     return f"{level}.{progress:02d}"
+def get_skill_progress(skill_xp, skill_levels):  # <<< NEW
+    previous_total_xp = 0
+
+    for level_data in skill_levels:
+        level = level_data["level"]
+        total_xp_for_level = level_data["totalExpRequired"]
+
+        if skill_xp < total_xp_for_level:
+            xp_into_level = skill_xp - previous_total_xp
+            xp_needed_for_next_level = total_xp_for_level - previous_total_xp
+
+            return level - 1, xp_into_level, xp_needed_for_next_level, 0
+
+        previous_total_xp = total_xp_for_level
+
+    max_level = skill_levels[-1]["level"]
+    overflow_xp = skill_xp - previous_total_xp
+
+    return max_level, 0, 0, overflow_xp
