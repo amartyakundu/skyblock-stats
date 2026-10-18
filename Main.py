@@ -1,4 +1,6 @@
+import json
 import httpx
+
 from formatting import (
     format_money,
     format_level,
@@ -7,24 +9,22 @@ from formatting import (
     get_item_rarity,
 )
 from config import API_KEY
-import json
 from inventory import decode_inventory_data
-print("==============================")
-print("        Skyblock Stats        ")
-print("==============================")
-print()
-username = input("Enter Minecraft Username: ")
-print(f"Searching for {username}...")
-mojang_url = f"https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}"
-client = httpx.Client(
-    http2=False,
-    timeout=30
-)
-mojang_response = client.get(mojang_url)
-#mojang api
-if mojang_response.status_code == 200:
-    mojang_data = mojang_response.json()
-    uuid = mojang_data["id"]
+from dungeons import format_dungeons
+
+def get_minecraft_uuid(client, username):
+    #mojang api
+    mojang_url = f"https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}"
+    mojang_response = client.get(mojang_url)
+    if mojang_response.status_code == 200:
+        mojang_data = mojang_response.json()
+        return mojang_data["id"]
+    elif mojang_response.status_code == 404:
+        print("Player not found.")
+    else:
+        print(f"Mojang API Error: {mojang_response.status_code}")
+    return None
+def get_hypixel_data(client, uuid):
     # hypixel API
     hypixel_url = f"https://api.hypixel.net/v2/skyblock/profiles?uuid={uuid}"
     headers = {
@@ -33,22 +33,23 @@ if mojang_response.status_code == 200:
     hypixel_response = client.get(hypixel_url, headers=headers)
     if hypixel_response.status_code != 200:
         print(f"Hypixel API Error: {hypixel_response.status_code}")
-        exit()
-    hypixel_data = hypixel_response.json()
-    with open("hypixel_data.json", "w") as file:
-        json.dump(hypixel_data, file, indent=4)
+        return None
+    return hypixel_response.json()
+def get_skills_data(client):
     #skills api
     skills_url = "https://api.hypixel.net/v2/resources/skyblock/skills"
     skills_response = client.get(skills_url)
     if skills_response.status_code != 200:
         print(f"Skills API Error: {skills_response.status_code}")
-        exit()
-    skills_data = skills_response.json()["skills"]
+        return None
+    return skills_response.json()["skills"]
+def get_selected_profile(hypixel_data):
     #active profile finder
-    for profile in hypixel_data["profiles"]:
-        if profile["selected"]:
-            selected_profile = profile
-            break
+    for profile in hypixel_data.get("profiles") or []:
+        if profile.get("selected"):
+            return profile
+    return None
+def print_profile_info(selected_profile, uuid):
     #profile info
     print(f"Selected Profile: {selected_profile['cute_name']}")
     player = selected_profile["members"][uuid]
@@ -62,6 +63,8 @@ if mojang_response.status_code == 200:
     print(f"Bank: {format_money(bank)}")
     fairy_souls = player["fairy_soul"]["total_collected"]
     print(f"Total Fairy Souls Collected: {fairy_souls}")
+    return player
+def print_skills(player, skills_data):
     #skills info
     print()
     print("Skills:")
@@ -89,7 +92,6 @@ if mojang_response.status_code == 200:
         )
         display_name = skill_info["name"]
         if skill_level == skill_info["maxLevel"]:
-    #skills output
             print(
                 f"{display_name} {skill_level} | "
                 f"Overflow: {overflow_xp:,.0f} XP"
@@ -99,7 +101,12 @@ if mojang_response.status_code == 200:
                 f"{display_name} {skill_level} | "
                 f"{current_xp:,.0f}/{xp_needed:,.0f} XP"
             )
-#armour and equipment
+def print_dungeons_info(player):
+    #dungeons info
+    print()
+    print(format_dungeons(player.get("dungeons")))
+def print_armor_and_equipment(player):
+    #armour and equipment
     #armour
     print()
     print("Armour:")
@@ -134,6 +141,7 @@ if mojang_response.status_code == 200:
         item_name = remove_minecraft_color_codes(raw_item_name)
         rarity = get_item_rarity(raw_item_name)
         print(f"{equipment_slots[index]}: {item_name} ({rarity})")
+def print_active_pet(player):
     #active pet
     active_pet = None
     for pet in player["pets_data"]["pets"]:
@@ -143,11 +151,40 @@ if mojang_response.status_code == 200:
     print()
     if active_pet:
         pet_name = active_pet["type"].replace("_", " ").title()
-        pet_rarity = active_pet["tier"].title()        
+        pet_rarity = active_pet["tier"].title()
         print(f"Active Pet: {pet_rarity} {pet_name}")
     else:
         print("Active Pet: None")
-elif mojang_response.status_code == 404:
-    print("Player not found.")
-else:
-    print(f"Mojang API Error: {mojang_response.status_code}")
+def main():
+    print("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMM")
+    print("        Skyblock Stats        ")
+    print("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMM")
+    print()
+    username = input("Enter Minecraft Username: ")
+    print(f"Searching for {username}...")
+    with httpx.Client(
+        http2=False,
+        timeout=30
+    ) as client:
+        uuid = get_minecraft_uuid(client, username)
+        if uuid is None:
+            return
+        hypixel_data = get_hypixel_data(client, uuid)
+        if hypixel_data is None:
+            return
+        with open("hypixel_data.json", "w") as file:
+            json.dump(hypixel_data, file, indent=4)
+        skills_data = get_skills_data(client)
+        if skills_data is None:
+            return
+        selected_profile = get_selected_profile(hypixel_data)
+        if selected_profile is None:
+            print("No selected SkyBlock profile found.")
+            return
+        player = print_profile_info(selected_profile, uuid)
+        print_skills(player, skills_data)
+        print_dungeons_info(player)
+        print_armor_and_equipment(player)
+        print_active_pet(player)
+if __name__ == "__main__":
+    main()
