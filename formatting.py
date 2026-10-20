@@ -1,15 +1,22 @@
+def truncate_two_decimals(amount, unit):
+    # Cut off after 2 decimal places without rounding up (999.999 -> 999.99)
+    # Uses whole numbers so no tiny decimal errors sneak in
+    hundredths = int(amount) // (unit // 100)
+    return hundredths / 100
+
+
 def format_money(amount):
 
     if amount >= 1_000_000_000:
-        return f"{amount / 1_000_000_000:.1f}B"
+        return f"{truncate_two_decimals(amount, 1_000_000_000):.2f}B"
 
     elif amount >= 1_000_000:
-        return f"{amount / 1_000_000:.1f}M"
+        return f"{truncate_two_decimals(amount, 1_000_000):.2f}M"
 
     elif amount >= 1_000:
-        return f"{amount / 1_000:.1f}K"
+        return f"{truncate_two_decimals(amount, 1_000):.2f}K"
 
-    return f"{amount:.0f}"
+    return f"{int(amount)}"
 def format_level(experience):
 
     level = experience // 100
